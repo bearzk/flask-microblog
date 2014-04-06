@@ -2,7 +2,7 @@ from flask import render_template, flash, redirect, session, url_for, request, g
 from flask.ext.login import login_user, logout_user, current_user, login_required
 from app import app, db, oid, lm
 from forms import LoginForm, EditForm
-from models import User, ROLE_USER, ROLE_ADMIN
+from models import User, ROLE_USER, ROLE_ADMIN, Post
 from datetime import datetime
 
 @lm.user_loader
@@ -65,8 +65,11 @@ def after_login(resp):
         nickname = resp.nickname
         if nickname is None or nickname == "":
             nickname = resp.email.split('@')[0]
+        nickname = User.make_unique_nickname(nickname)
         user = User(nickname=nickname, email=resp.email, role=ROLE_USER)
         db.session.add(user)
+        db.session.commit()
+        db.session.add(user.follow(user))
         db.session.commit()
     remember_me = False
     if 'remember_me' in session:
@@ -74,11 +77,6 @@ def after_login(resp):
         session.pop('remember_me', None)
     login_user(user, remember=remember_me)
     return redirect(request.args.get('next') or url_for('index'))
-
-
-@app.before_request
-def before_request():
-    g.user = current_user
 
 
 @app.route('/logout')
@@ -119,7 +117,45 @@ def edit():
         form.nickname.data = g.user.nickname
         form.about_me.date = g.user.about_me
     return render_template('edit.html',
-                           form = form)
+                           form=form)
+
+@app.route('/follow/<nickname>')
+@login_required
+def follow(nickname):
+    user = User.query.filter_by(nickname=nickname).first()
+    if user is None:
+        flash('User ' + nickname + ' not found.')
+        return redirect(url_for('index'))
+    if user == g.user:
+        flash("you can't follow yourself!")
+        return redirect(url_for('user', nickname=nickname))
+    u = g.user.follow(user)
+    if u is None:
+        flash("Cannot follow " + nickname + ".")
+        return redirect(url_for('user', nickname=nickname))
+    db.session.add(u)
+    db.session.commit()
+    flash("You are now following " + nickname + "!")
+    return redirect(url_for('user', nickname=nickname))
+
+@app.route('/unfollow/<nickname>')
+@login_required
+def unfollow(nickname):
+    user = User.query.filter_by(nickname=nickname).first()
+    if user is None:
+        flash('User ' + nickname + ' not found.')
+        return redirect(url_for('index'))
+    if user == g.user:
+        flash("you can't unfollow yourself!")
+        return redirect(url_for('user', nickname=nickname))
+    u = g.user.unfollow(user)
+    if u is None:
+        flash("Cannot follow " + nickname + ".")
+        return redirect(url_for('user', nickname=nickname))
+    db.session.add(u)
+    db.session.commit()
+    flash("You have stopped following " + nickname + "!")
+    return redirect(url_for('user', nickname=nickname))
 
 @app.errorhandler(404)
 def not_found_error(error):
