@@ -8,7 +8,7 @@ ROLE_ADMIN = 1
 
 
 class User(db.Model):
-    id = db.Column(db.Integer, primary_key = True)
+    id = db.Column(db.Integer, primary_key=True)
     nickname = db.Column(db.String(64), index=True, unique=True)
     email = db.Column(db.String(128), index=True, unique=True)
     role = db.Column(db.SmallInteger, default=ROLE_USER)
@@ -18,13 +18,15 @@ class User(db.Model):
 
     @staticmethod
     def make_unique_nickname(nickname):
-        if User.query.filter_by(nickname=nickname).first() == None:
+        if User.query.filter_by(nickname=nickname).first() is None:
             return nickname
         version = 2
         while True:
             new_nickname = nickname + str(version)
-            if User.query.filter_by(nickname=new_nickname).first() == None:
-                return new_nickname
+            if User.query.filter_by(nickname=new_nickname).first() is None:
+                break
+            version += 1
+        return new_nickname
 
     def __repr__(self):
         return '<User %r>' % (self. nickname)
